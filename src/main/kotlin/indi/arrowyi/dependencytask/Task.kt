@@ -1,10 +1,34 @@
+/*
+ * Copyright (c) 2022—2022.  Arrowyi. All rights reserved.
+ * email : arrowyi@gmail.com
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+
 package indi.arrowyi.dependencytask
 
+import TaskException
 import kotlinx.coroutines.*
 import java.util.concurrent.ConcurrentLinkedDeque
 
 interface TaskStatusListener {
-    fun onStatusChanged(task: Task)
+    fun onActionDone(task: Task)
+    fun onSuccessorsDone(task: Task)
 }
 
 enum class Status {
@@ -29,12 +53,12 @@ abstract class Task {
     var isAllSuccessorsDone: Boolean = false
         private set
 
-    companion object {
+    internal companion object {
         @OptIn(ExperimentalCoroutinesApi::class)
-        internal val taskDispatcher by lazy { Dispatchers.Default.limitedParallelism(1) }
-        internal val taskScope = CoroutineScope(taskDispatcher)
+        val taskDispatcher by lazy { Dispatchers.Default.limitedParallelism(1) }
+        val taskScope = CoroutineScope(taskDispatcher)
 
-        internal fun runOnTaskScope(block: () -> Unit) {
+        fun runOnTaskScope(block: () -> Unit) {
             taskScope.launch {
                 block()
             }
@@ -46,25 +70,20 @@ abstract class Task {
     suspend fun addDependency(task: Task) = withContext(taskDispatcher) {
         takeIf { status.ordinal < Status.Checked.ordinal }
             ?.run {
+
                 task.addSuccessor(this@Task)
             }
     }
 
-    fun addResultListener(taskStatusListener: TaskStatusListener) {
-        listeners.add(taskStatusListener)
-    }
-
-    fun removeResultListener(taskStatusListener: TaskStatusListener) {
-        listeners.remove(taskStatusListener)
-    }
-
     fun actionResult(res: Boolean) = runOnTaskScope {
         status = if (res) Status.ActionSuccess else Status.ActionFailed
-        notifyStatusChanged()
+        notifyStatusChanged { listener, task ->
+            listener.onActionDone(task)
+        }
         onActionDone(res)
     }
 
-    open fun onDependencyDone(task: Task) = runOnTaskScope {
+    protected open fun onDependencyDone(task: Task) = runOnTaskScope {
         dependencies.takeIf { it.contains(task) }
             ?.takeIf {
                 it.all { status == Status.ActionSuccess }
@@ -74,7 +93,7 @@ abstract class Task {
 
     }
 
-    open fun onSuccessorResult(successor: Task, res: Boolean) = runOnTaskScope {
+    protected open fun onSuccessorResult(successor: Task, res: Boolean) = runOnTaskScope {
         if (!res) {
             reportResult(false)
         } else {
@@ -82,17 +101,28 @@ abstract class Task {
                 it.all { isAllSuccessorsDone }
             }?.let {
                 isAllSuccessorsDone = true
-                notifyStatusChanged()
+                notifyStatusChanged { listener, task ->
+                    listener.onSuccessorsDone(task)
+                }
                 reportResult(true)
             }
         }
     }
 
-    open fun getTaskDescription() = ""
+    protected open fun getTaskDescription() = ""
 
     internal fun getDescription() = "${this::class.simpleName} : ${getTaskDescription()}"
 
-    internal fun check(): Boolean {
+
+    internal fun addResultListener(taskStatusListener: TaskStatusListener) {
+        listeners.add(taskStatusListener)
+    }
+
+    internal fun removeResultListener(taskStatusListener: TaskStatusListener) {
+        listeners.remove(taskStatusListener)
+    }
+
+    internal fun checked(): Boolean {
         return when (status) {
             Status.Init -> {
                 status = Status.Checked
@@ -112,7 +142,10 @@ abstract class Task {
     internal fun start() {
         when (status) {
             Status.ActionSuccess -> {
-                notifyStatusChanged()
+                notifyStatusChanged { listener, task ->
+                    listener.onActionDone(task)
+                    task.takeIf { isAllSuccessorsDone }?.let { listener.onSuccessorsDone(task) }
+                }
                 if (isAllSuccessorsDone)
                     reportResult(true)
                 else
@@ -123,7 +156,7 @@ abstract class Task {
                 try {
                     taskScope.launch(Dispatchers.Default) { doAction() }
                 } catch (e: Exception) {
-                    TaskLog.e("task : ${getDescription()}, ${e.message}")
+                    taskLog.e("task : ${getDescription()}, ${e.message}")
                     actionResult(false)
                 }
             }
@@ -146,9 +179,9 @@ abstract class Task {
         }
     }
 
-    private fun notifyStatusChanged() {
+    private fun notifyStatusChanged(block: (TaskStatusListener, Task) -> Unit) {
         listeners.forEach {
-            taskScope.launch(Dispatchers.Default) { it.onStatusChanged(this@Task) }
+            taskScope.launch(Dispatchers.Default) { block(it, this@Task) }
         }
     }
 

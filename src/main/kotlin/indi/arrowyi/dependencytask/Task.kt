@@ -53,29 +53,17 @@ abstract class Task {
     var isAllSuccessorsDone: Boolean = false
         private set
 
-    internal companion object {
-        @OptIn(ExperimentalCoroutinesApi::class)
-        val taskDispatcher by lazy { Dispatchers.Default.limitedParallelism(1) }
-        val taskScope = CoroutineScope(taskDispatcher)
-
-        fun runOnTaskScope(block: () -> Unit) {
-            taskScope.launch {
-                block()
-            }
-        }
-    }
-
     abstract suspend fun doAction()
 
-    suspend fun addDependency(task: Task) = withContext(taskDispatcher) {
-        takeIf { status.ordinal < Status.Checked.ordinal }
-            ?.run {
-
+    suspend fun addDependency(task: Task) = withContext(TaskScope.taskDispatcher) {
+        takeIf { status.ordinal < Status.Checked.ordinal && !dependencies.contains(task) }
+            ?.let {
+                dependencies.add(task)
                 task.addSuccessor(this@Task)
             }
     }
 
-    fun actionResult(res: Boolean) = runOnTaskScope {
+    fun actionResult(res: Boolean) = TaskScope.runOnTaskScope {
         status = if (res) Status.ActionSuccess else Status.ActionFailed
         notifyStatusChanged { listener, task ->
             listener.onActionDone(task)
@@ -83,23 +71,23 @@ abstract class Task {
         onActionDone(res)
     }
 
-    protected open fun onDependencyDone(task: Task) = runOnTaskScope {
+    protected open fun onDependencyDone(task: Task) = TaskScope.runOnTaskScope {
         dependencies.takeIf { it.contains(task) }
             ?.takeIf {
-                it.all { status == Status.ActionSuccess }
+                it.all { task -> task.status == Status.ActionSuccess }
             }?.run {
                 start()
             }
 
     }
 
-    protected open fun onSuccessorResult(successor: Task, res: Boolean) = runOnTaskScope {
+    protected open fun onSuccessorResult(successor: Task, res: Boolean) = TaskScope.runOnTaskScope {
         if (!res) {
             reportResult(false)
         } else {
             successors.takeIf { it.contains(successor) }?.takeIf {
-                it.all { isAllSuccessorsDone }
-            }?.let {
+                it.all { successor -> successor.isAllSuccessorsDone }
+            }?.run {
                 isAllSuccessorsDone = true
                 notifyStatusChanged { listener, task ->
                     listener.onSuccessorsDone(task)
@@ -122,14 +110,10 @@ abstract class Task {
         listeners.remove(taskStatusListener)
     }
 
-    internal fun checked(): Boolean {
+    internal fun check() {
         return when (status) {
             Status.Init -> {
                 status = Status.Checked
-                true
-            }
-            Status.Checked -> {
-                false
             }
             else -> {
                 throw TaskException("check : task -> ${getDescription()} status is wrong : $status")
@@ -140,6 +124,7 @@ abstract class Task {
     //caz it is the internal method, we can't make sure that it is running on the task scope, so
     //there is no need to put it on the task dispatcher
     internal fun start() {
+        taskLog.d("${getDescription()} : start and status is $status")
         when (status) {
             Status.ActionSuccess -> {
                 notifyStatusChanged { listener, task ->
@@ -154,11 +139,14 @@ abstract class Task {
             Status.Checked, Status.ActionFailed -> {
                 status = Status.Running
                 try {
-                    taskScope.launch(Dispatchers.Default) { doAction() }
+                    TaskScope.getScope().launch(Dispatchers.Default) { doAction() }
                 } catch (e: Exception) {
                     taskLog.e("task : ${getDescription()}, ${e.message}")
                     actionResult(false)
                 }
+            }
+            Status.Running -> {
+                taskLog.d("${getDescription()} is already running")
             }
             else -> {
                 throw TaskException("start :  task -> ${getDescription()} start status wrong : $status")
@@ -174,14 +162,20 @@ abstract class Task {
     private fun onActionDone(res: Boolean) {
         if (res && successors.isNotEmpty()) {
             startSuccessors()
-        } else {
-            reportResult(res)
+            return
         }
+
+        if (res && successors.isEmpty()) {
+            isAllSuccessorsDone = true
+        }
+
+        reportResult(res)
     }
 
     private fun notifyStatusChanged(block: (TaskStatusListener, Task) -> Unit) {
         listeners.forEach {
-            taskScope.launch(Dispatchers.Default) { block(it, this@Task) }
+            taskLog.d("${this@Task.getTaskDescription()} notify status")
+            TaskScope.getScope().launch (Dispatchers.Default){ block(it, this@Task) }
         }
     }
 

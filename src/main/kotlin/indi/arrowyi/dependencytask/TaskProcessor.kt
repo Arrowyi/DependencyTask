@@ -26,6 +26,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
 
 private data class TravelNode(
     val task: Task,
@@ -51,40 +52,66 @@ class TaskProcessor(private val firstTask: Task, iTaskLog: ITaskLog = DefaultTas
     }
 
     fun start(): Flow<ProgressStatus> = callbackFlow {
-        Task.runOnTaskScope {
+        val listener = object : TaskStatusListener {
+            override fun onActionDone(task: Task) {
+                when (task.status) {
+                    Status.ActionSuccess -> trySendBlocking(Progress(task))
+                    else -> {
+                        taskLog.d("send failed")
+                        trySendBlocking(Failed(task))
+                        channel.close()
+                    }
+                }
+            }
+
+            override fun onSuccessorsDone(task: Task) {
+                taskLog.d("onSuccessorsDone : ${task.getDescription()}")
+                if (task === firstTask) {
+                    taskLog.d("send complete")
+                    trySendBlocking(Complete())
+                    channel.close()
+                }
+            }
+        }
+
+        TaskScope.runOnTaskScope {
             if (!isChecked) {
-                isChecked = check(object : TaskStatusListener {
-                    override fun onActionDone(task: Task) {
-                        when (task.status) {
-                            Status.ActionSuccess -> trySendBlocking(Progress(task))
-                            else -> trySendBlocking(Failed(task))
-                        }
-                    }
-
-                    override fun onSuccessorsDone(task: Task) {
-                        if (task === firstTask) trySendBlocking(Complete())
-                    }
-                })
-
+                isChecked = check()
                 tasks.forEach {
-                    it.checked()
+                    it.check()
                 }
             }
 
             if (!isChecked) {
+                taskLog.d("send check failed")
                 trySendBlocking(Check(false, null))
+                channel.close()
                 return@runOnTaskScope
             }
+
+            registerStatusListenerForTasks(listener)
 
             trySendBlocking(Check(true, tasks.toList()))
 
             firstTask.start()
         }
 
-        awaitClose()
+        awaitClose {
+            TaskScope.getScope().launch { unregisterStatusListenerForTasks(listener) }
+            TaskScope.close()
+        }
     }
 
-    internal fun check(taskStatusListener: TaskStatusListener?): Boolean {
+    private fun registerStatusListenerForTasks(taskStatusListener: TaskStatusListener) {
+        tasks.forEach { it.addResultListener(taskStatusListener) }
+    }
+
+    private fun unregisterStatusListenerForTasks(taskStatusListener: TaskStatusListener) {
+        tasks.forEach { it.removeResultListener(taskStatusListener) }
+    }
+
+    //check if there is a cycle dependency
+    internal fun check(): Boolean {
         val stack = mutableListOf<TravelNode>()
         val visitedTasks = HashSet<Task>()
 
@@ -100,9 +127,6 @@ class TaskProcessor(private val firstTask: Task, iTaskLog: ITaskLog = DefaultTas
 
             if (!tasks.contains(curNode.task)) {
                 tasks.add(curNode.task)
-                taskStatusListener?.let {
-                    curNode.task.addResultListener(taskStatusListener)
-                }
             }
 
             //the leaf node

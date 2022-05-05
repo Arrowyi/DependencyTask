@@ -21,22 +21,39 @@
 
 package indi.arrowyi.dependencytask
 
-interface ITaskLog {
-    fun e(msg: String)
-    fun d(msg: String)
-}
+import kotlinx.coroutines.*
+import java.util.concurrent.CancellationException
 
-internal lateinit var taskLog: ITaskLog
+internal object TaskScope {
 
-internal class TaskLog(iTaskLog: ITaskLog) : ITaskLog by iTaskLog
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val taskDispatcher by lazy { Dispatchers.Default.limitedParallelism(1) }
+    private var taskScope: CoroutineScope? = null
 
-internal object DefaultTaskLog : ITaskLog {
-    override fun e(msg: String) {
-        println("error : $msg --> ${Thread.currentThread()}")
+    fun runOnTaskScope(block: () -> Unit) {
+        getScope().launch {
+            block()
+        }
     }
 
-    override fun d(msg: String) {
-        println("debug : $msg --> ${Thread.currentThread()}")
+    @Synchronized
+    fun close() {
+        if (taskScope !== null) {
+            taskScope!!.launch {
+                cancel(CancellationException("Task Scope closed"))
+            }
+            taskScope = null
+        }
     }
-}
 
+    @Synchronized
+    internal fun getScope(): CoroutineScope {
+        if (taskScope === null) {
+            taskScope = CoroutineScope(taskDispatcher)
+        }
+
+        return taskScope as CoroutineScope
+    }
+
+
+}

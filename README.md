@@ -126,3 +126,5 @@ fun main() = runBlocking {
   - And the `Complete` status will passed if all the tasks are done successfully, meanwhile 'Failed` status will passed immedietely if there is a failed task. any of those two status will end the progress.
   - If the `Check` status is with a result false, the progress will also be end.
   
+  ##Release Version
+  The last release version is v1.0.4

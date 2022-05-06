@@ -36,10 +36,16 @@ private data class TravelNode(
 
 
 sealed class ProgressStatus()
-
+//check if there is circular dependency , true is for check ok (no circular dependency), false will end the processor, and the tasks is all
+//the tasks this processor will do.
 class Check(val result: Boolean, val tasks: List<Task>?) : ProgressStatus()
+
+//called if the task is done
 class Progress(val task: Task) : ProgressStatus()
+//called if all the tasks is done successfully, and the processor will be ended
 class Complete : ProgressStatus()
+
+//called if any of the task failed, and the processor will be ended immediately
 class Failed(val failedTask: Task) : ProgressStatus()
 
 class TaskProcessor(private val firstTask: Task, iTaskLog: ITaskLog = DefaultTaskLog) {

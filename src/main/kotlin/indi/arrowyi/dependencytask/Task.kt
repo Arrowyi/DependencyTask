@@ -99,7 +99,7 @@ abstract class Task {
 
     protected open fun getTaskDescription() = ""
 
-    internal fun getDescription() = "${this::class.simpleName} : ${getTaskDescription()}"
+    fun getDescription() = "${this::class.simpleName} : ${getTaskDescription()}"
 
 
     internal fun addResultListener(taskStatusListener: TaskStatusListener) {

@@ -49,7 +49,7 @@ Add the dependency
 - if the task done its job, call the **actionResult** function with true(job done successfully) or false(job done failed) to notify the framework the result of the task
 
 ### Step 2 : start with the TaskProcessor
-- create the **TaskProcessor** class initance with a --InitTask-- (which is your first order task)
+- create the **TaskProcessor** class initance with a __InitTask__ (which is your first order task)
 - call the **start** funcation to get a 'flow<ProgressStatus>'
 - call **collet** function of the flow to get the **ProgressStatus** class( which is represent for the progress status ) sequentially
   
@@ -108,10 +108,26 @@ fun main() = runBlocking {
 }
 
   ```
+
+The progress status is :
+```kotlin
+sealed class ProgressStatus()
+//check if there is circular dependency , true is for check ok (no circular dependency), false will end the processor, and the tasks is all
+//the tasks this processor will do.
+class Check(val result: Boolean, val tasks: List<Task>?) : ProgressStatus()
+
+//called if the task is done
+class Progress(val task: Task) : ProgressStatus()
+//called if all the tasks is done successfully, and the processor will be ended
+class Complete : ProgressStatus()
+
+//called if any of the task failed, and the processor will be ended immediately
+class Failed(val failedTask: Task) : ProgressStatus()
+```
   
   ### Attention 
   - there should be **only one** init task node as the root node of the dependence tree
-  - you must pass the **root node** to initlaze the **TaskPrograss**
+  - you must pass the **root node** to initlaze the **TaskProcessor**
   - if there is a circular dependency, the **Check** status will pass a **result** value false.
   - you must call **actionResult** function of the task after your job is done, whatever it is failed or has an exception.
 
@@ -119,12 +135,12 @@ fun main() = runBlocking {
   
   ![text](http://assets.processon.com/chart_image/627502611e08532771695e9f.png)
   
-  - As the above dependency task tree, when you beginning to call the function **collect** of the flow, it will pass the `check` status with true to indicate that the circular dependency check is OK.
-  - And then ，it will pass the `Progress` status to indicate which task is done. the TaskProgress will call task's **action** function concurrently if their dependency tasks are done. 
+  - As the above dependency task tree, when you begin to call the function **collect** of the `Flow`, it will pass the `check` status with true to indicate that the circular dependency check is OK.
+  - And then ，it will pass the `Progress` status to indicate which task is done. the TaskProcessor will call task's **action** function concurrently if their dependency tasks are done. 
   - As the above tree, the task7's **action** function will be called after task2 and task5 are done, and task7 and task8 maybe called concurrently.
   - For example, after task2 is done, the **onDependencyDone** function of task7 will be called, you could override this function to get some info from the dependency task, __you must call the super function if you override this function__
-  - And the `Complete` status will passed if all the tasks are done successfully, meanwhile 'Failed` status will passed immedietely if there is a failed task. any of those two status will end the progress.
-  - If the `Check` status is with a result false, the progress will also be end.
+  - And the `Complete` status will be passed if all the tasks are done successfully, meanwhile 'Failed` status will be passed immediately if there is a failed task. any of those two status will end the Processor.
+  - If the `Check` status is with a result false, the Processor will also be ended.
   
   ## Release Version
-  The last release version is v1.0.4
+  The last release version is v1.0.5

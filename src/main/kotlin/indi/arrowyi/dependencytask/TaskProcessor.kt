@@ -22,6 +22,8 @@
 
 package indi.arrowyi.dependencytask
 
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.flow.Flow
@@ -39,16 +41,25 @@ sealed class ProgressStatus()
 //check if there is circular dependency , true is for check ok (no circular dependency), false will end the processor, and the tasks is all
 //the tasks this processor will do.
 class Check(val result: Boolean, val tasks: List<Task>?) : ProgressStatus()
+
 //called if the task is done
 class Progress(val task: Task) : ProgressStatus()
+
 //called if all the tasks is done successfully, and the processor will be ended
 class Complete : ProgressStatus()
+
 //called if any of the task failed, and the processor will be ended immediately
 class Failed(val failedTask: Task) : ProgressStatus()
+
 //The Processor is already running, and this flow will be ended
 class AlreadyRunning() : ProgressStatus()
 
-class TaskProcessor(private val firstTask: Task, iTaskLog: ITaskLog = DefaultTaskLog) {
+class TaskProcessor(
+    private val firstTask: Task,
+    iTaskLog: ITaskLog = DefaultTaskLog,
+    actionDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    notifyDispatcher: CoroutineDispatcher = Dispatchers.Default
+) {
 
     private var isChecked = false
     internal val tasks = HashSet<Task>()
@@ -58,6 +69,8 @@ class TaskProcessor(private val firstTask: Task, iTaskLog: ITaskLog = DefaultTas
 
     init {
         TaskLog(iTaskLog).also { taskLog = it }
+        TaskScope.actionDispatcher = actionDispatcher
+        TaskScope.notifyDispatcher = notifyDispatcher
     }
 
     fun start(): Flow<ProgressStatus> = callbackFlow {

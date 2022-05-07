@@ -55,7 +55,9 @@ abstract class Task {
 
     abstract suspend fun doAction()
 
-    suspend fun addDependency(task: Task) = withContext(TaskScope.taskDispatcher) {
+    //synchronize for check() to change the status to checked
+    @Synchronized
+    fun addDependency(task: Task) {
         takeIf { status.ordinal < Status.Checked.ordinal && !dependencies.contains(task) }
             ?.let {
                 dependencies.add(task)
@@ -71,7 +73,7 @@ abstract class Task {
         onActionDone(res)
     }
 
-    protected open fun onDependencyDone(task: Task) = TaskScope.runOnTaskScope {
+    protected open fun onDependencyDone(task: Task) {
         dependencies.takeIf { it.contains(task) }
             ?.takeIf {
                 it.all { task -> task.status == Status.ActionSuccess }
@@ -81,7 +83,7 @@ abstract class Task {
 
     }
 
-    protected open fun onSuccessorResult(successor: Task, res: Boolean) = TaskScope.runOnTaskScope {
+    protected open fun onSuccessorResult(successor: Task, res: Boolean) {
         if (!res) {
             reportResult(false)
         } else {
@@ -113,6 +115,8 @@ abstract class Task {
         listeners.remove(taskStatusListener)
     }
 
+    //synchronized for addDependency to check the status
+    @Synchronized
     internal fun check() {
         return when (status) {
             Status.Init -> {
@@ -142,7 +146,7 @@ abstract class Task {
             Status.Checked, Status.ActionFailed -> {
                 status = Status.Running
                 try {
-                    TaskScope.getScope().launch(Dispatchers.Default) { doAction() }
+                    TaskScope.launchOnActionDispatcher { doAction() }
                 } catch (e: Exception) {
                     taskLog.e("task : ${getDescription()}, ${e.message}")
                     actionResult(false)
@@ -178,7 +182,7 @@ abstract class Task {
     private fun notifyStatusChanged(block: (TaskStatusListener, Task) -> Unit) {
         listeners.forEach {
             taskLog.d("${this@Task.getTaskDescription()} notify status")
-            TaskScope.getScope().launch(Dispatchers.Default) { block(it, this@Task) }
+            TaskScope.launchOnNotifyDispatcher { block(it, this@Task) }
         }
     }
 

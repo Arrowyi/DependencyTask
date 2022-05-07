@@ -126,6 +126,7 @@ class AlreadyRunning() : ProgressStatus()
 
 ### Features
 - The processor will check the circular dependency
+- The task's action will run concurrently if their dependency tasks are done (you could specify the dispatcher the action running on by the parameter of TaskProcessor)
 - If you use the same processor instance to start many times, the successful tasks will not do action again, the processor will call the **action** function from the last failed one.
 - If you use the same processor instance to start more than one Flow simultaneously, only one Flow will run and the others will receive the **AlreadyRunning** status and be ended.
 - For the detail of the features you could ref to the unit test

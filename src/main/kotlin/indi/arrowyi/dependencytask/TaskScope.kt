@@ -27,14 +27,30 @@ import java.util.concurrent.CancellationException
 internal object TaskScope {
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val taskDispatcher by lazy { Dispatchers.Default.limitedParallelism(1) }
+    private val taskDispatcher by lazy { Dispatchers.Default.limitedParallelism(1) }
     private var taskScope: CoroutineScope? = null
+
+    internal lateinit var actionDispatcher: CoroutineDispatcher
+    internal lateinit var notifyDispatcher: CoroutineDispatcher
 
     fun runOnTaskScope(block: () -> Unit) {
         getScope().launch {
             block()
         }
     }
+
+    fun launchOnActionDispatcher(block: suspend CoroutineScope.() -> Unit) {
+        getScope().launch(actionDispatcher) {
+            block()
+        }
+    }
+
+    fun launchOnNotifyDispatcher(block: () -> Unit) {
+        getScope().launch(notifyDispatcher) {
+            block()
+        }
+    }
+
 
     @Synchronized
     fun close(closeBlock: () -> Unit) {
@@ -46,7 +62,7 @@ internal object TaskScope {
     }
 
     @Synchronized
-    internal fun getScope(): CoroutineScope {
+    private fun getScope(): CoroutineScope {
         if (taskScope === null) {
             taskScope = CoroutineScope(taskDispatcher)
         }

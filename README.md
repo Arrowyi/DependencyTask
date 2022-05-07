@@ -99,9 +99,9 @@ fun main() = runBlocking {
     TaskProcessor(task1).start().collect() {
         when (it) {
             is Check -> println("check result is : ${it.result}")
-            is Progress -> println("task done with ${it.task.getDescription()}")
-            is Complete -> println("task is complete")
-            is Failed -> println("task is failed with ${it.failedTask.getDescription()}")
+            is Progress -> println("task : ${it.task.getDescription()} is done")
+            is Complete -> println("all the task is done successfully,and the flow is ended")
+            is Failed -> println("task : ${it.failedTask.getDescription()} is failed , and the flow is ended ")
         }
     }
 
@@ -140,12 +140,12 @@ class AlreadyRunning() : ProgressStatus()
   
   ![text](http://assets.processon.com/chart_image/627502611e08532771695e9f.png)
   
-  - As the above dependency task tree, when you begin to call the function **collect** of the `Flow`, it will pass the `check` status with true to indicate that the circular dependency check is OK.
+  - As the above dependency task tree, when you begin to call the function **collect** of the `Flow`(which is got from **start** function), it will pass the `check` status with true to indicate that the circular dependency check is OK.
   - And then ，it will pass the `Progress` status to indicate which task is done. the TaskProcessor will call task's **action** function concurrently if their dependency tasks are done. 
   - As the above tree, the task7's **action** function will be called after task2 and task5 are done, and task7 and task8 maybe called concurrently.
   - For example, after task2 is done, the **onDependencyDone** function of task7 will be called, you could override this function to get some info from the dependency task, __you must call the super function if you override this function__
-  - And the `Complete` status will be passed if all the tasks are done successfully, meanwhile 'Failed` status will be passed immediately if there is a failed task. any of those two status will end the Processor.
-  - If the `Check` status is with a result false, the Processor will also be ended.
+  - And the `Complete` status will be received if all the tasks are done successfully, otherwise 'Failed` status will be received immediately if there is a failed task. any of those two status will end the **Flow**.
+  - If the `Check` status is with a result false, the **Flow** will also be ended.
   
   ## Release Version
   The last release version please ref to the Release page

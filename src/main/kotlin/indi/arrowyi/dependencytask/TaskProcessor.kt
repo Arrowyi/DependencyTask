@@ -45,7 +45,7 @@ class Progress(val task: Task) : ProgressStatus()
 class Complete : ProgressStatus()
 //called if any of the task failed, and the processor will be ended immediately
 class Failed(val failedTask: Task) : ProgressStatus()
-//The Flow is already running, and this flow will be ended
+//The Processor is already running, and this flow will be ended
 class AlreadyRunning() : ProgressStatus()
 
 class TaskProcessor(private val firstTask: Task, iTaskLog: ITaskLog = DefaultTaskLog) {

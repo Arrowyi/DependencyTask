@@ -85,15 +85,18 @@ abstract class Task {
         if (!res) {
             reportResult(false)
         } else {
-            successors.takeIf { it.contains(successor) }?.takeIf {
-                it.all { successor -> successor.isAllSuccessorsDone }
-            }?.run {
-                isAllSuccessorsDone = true
-                notifyStatusChanged { listener, task ->
-                    listener.onSuccessorsDone(task)
+            successors.takeIf { it.contains(successor) }
+                ?.takeUnless { isAllSuccessorsDone }
+                ?.takeIf {
+                    it.all { successor -> successor.isAllSuccessorsDone }
                 }
-                reportResult(true)
-            }
+                ?.run {
+                    isAllSuccessorsDone = true
+                    notifyStatusChanged { listener, task ->
+                        listener.onSuccessorsDone(task)
+                    }
+                    reportResult(true)
+                }
         }
     }
 
@@ -175,7 +178,7 @@ abstract class Task {
     private fun notifyStatusChanged(block: (TaskStatusListener, Task) -> Unit) {
         listeners.forEach {
             taskLog.d("${this@Task.getTaskDescription()} notify status")
-            TaskScope.getScope().launch (Dispatchers.Default){ block(it, this@Task) }
+            TaskScope.getScope().launch(Dispatchers.Default) { block(it, this@Task) }
         }
     }
 

@@ -26,7 +26,6 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.launch
 
 private data class TravelNode(
     val task: Task,
@@ -36,22 +35,26 @@ private data class TravelNode(
 
 
 sealed class ProgressStatus()
+
 //check if there is circular dependency , true is for check ok (no circular dependency), false will end the processor, and the tasks is all
 //the tasks this processor will do.
 class Check(val result: Boolean, val tasks: List<Task>?) : ProgressStatus()
-
 //called if the task is done
 class Progress(val task: Task) : ProgressStatus()
 //called if all the tasks is done successfully, and the processor will be ended
 class Complete : ProgressStatus()
-
 //called if any of the task failed, and the processor will be ended immediately
 class Failed(val failedTask: Task) : ProgressStatus()
+//The Flow is already running, and this flow will be ended
+class AlreadyRunning() : ProgressStatus()
 
 class TaskProcessor(private val firstTask: Task, iTaskLog: ITaskLog = DefaultTaskLog) {
 
     private var isChecked = false
     internal val tasks = HashSet<Task>()
+
+    @Volatile
+    private var isRunning = false
 
     init {
         TaskLog(iTaskLog).also { taskLog = it }
@@ -80,7 +83,22 @@ class TaskProcessor(private val firstTask: Task, iTaskLog: ITaskLog = DefaultTas
             }
         }
 
+        var duplication = false
+
         TaskScope.runOnTaskScope {
+            taskLog.d(
+                "processor begin with running status " +
+                        "is $isRunning with ${this@TaskProcessor} \n and producer scope is $this"
+            )
+            if (isRunning) {
+                trySendBlocking(AlreadyRunning())
+                duplication = true
+                channel.close()
+                return@runOnTaskScope
+            } else {
+                isRunning = true
+            }
+
             if (!isChecked) {
                 isChecked = check()
                 tasks.forEach {
@@ -103,8 +121,13 @@ class TaskProcessor(private val firstTask: Task, iTaskLog: ITaskLog = DefaultTas
         }
 
         awaitClose {
-            TaskScope.getScope().launch { unregisterStatusListenerForTasks(listener) }
-            TaskScope.close()
+            takeUnless { duplication }?.run {
+                TaskScope.close {
+                    taskLog.d("call close with ${this@TaskProcessor} \n and producer scope is $this")
+                    unregisterStatusListenerForTasks(listener)
+                    isRunning = false
+                }
+            }
         }
     }
 

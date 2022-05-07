@@ -154,6 +154,53 @@ class UnitTest {
 
     }
 
+    @Test
+    internal fun duplicateStartTest() = runBlocking {
+        task1 = SuspendTaskNotDoActionAgain("not call again task 1")
+        task2 = SuspendTaskNotDoActionAgain("not call again task 2")
+        task3 = SuspendTaskNotDoActionAgain("not call again task 3")
+        val taskTwiceRun4 = SuspendTaskWithOneFailedSecondSuccess("task twice run 4")
+        task5 = SuspendTaskNotDoActionAgain("not call again task 5")
+        task6 = SuspendTaskNotDoActionAgain("not call again task 6")
+
+        task2.addDependency(task1)
+        task3.addDependency(task1)
+        taskTwiceRun4.addDependency(task3)
+        taskTwiceRun4.addDependency(task2)
+        task5.addDependency(taskTwiceRun4)
+        task6.addDependency(task5)
+        task6.addDependency(taskTwiceRun4)
+
+        val taskProcessor = TaskProcessor(task1)
+
+        launch {
+            taskProcessor.start().collect(){
+                when(it) {
+                    is AlreadyRunning -> {
+                        println("should not call duplication")
+                        assert(false)
+                    }
+                }
+            }
+        }
+
+        launch {
+            taskProcessor.start().collect() {
+                when (it) {
+                    is AlreadyRunning -> println("duplication")
+                    else -> {
+                        println(it)
+                        assert(false)
+                    }
+                }
+            }
+        }
+
+        delay(1000)
+        assertTrue { checkProcessorResult(taskProcessor.start(), 1000) }
+
+    }
+
     private suspend fun checkProcessorResult(flow: Flow<ProgressStatus>, maxTime: Long): Boolean {
         var res = false
 

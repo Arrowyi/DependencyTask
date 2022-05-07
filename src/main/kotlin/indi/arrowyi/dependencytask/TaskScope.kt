@@ -37,13 +37,12 @@ internal object TaskScope {
     }
 
     @Synchronized
-    fun close() {
+    fun close(closeBlock: () -> Unit) {
         if (taskScope !== null) {
-            taskScope!!.launch {
-                cancel(CancellationException("Task Scope closed"))
-            }
-            taskScope = null
+            taskScope!!.cancel(CancellationException("Task Scope closed"))
+            closeBlock()
         }
+        taskScope = null
     }
 
     @Synchronized

@@ -111,25 +111,30 @@ fun main() = runBlocking {
 
 The progress status is :
 ```kotlin
-sealed class ProgressStatus()
 //check if there is circular dependency , true is for check ok (no circular dependency), false will end the processor, and the tasks is all
 //the tasks this processor will do.
 class Check(val result: Boolean, val tasks: List<Task>?) : ProgressStatus()
-
 //called if the task is done
 class Progress(val task: Task) : ProgressStatus()
 //called if all the tasks is done successfully, and the processor will be ended
 class Complete : ProgressStatus()
-
 //called if any of the task failed, and the processor will be ended immediately
 class Failed(val failedTask: Task) : ProgressStatus()
+//The Flow is already running, and this flow will be ended
+class AlreadyRunning() : ProgressStatus()
 ```
-  
-  ### Attention 
+
+### Features
+- The processor will check the circular dependency
+- If you use the same processor instance to start many times, the successful tasks will not do action again, the processor will call the **action** function from the last failed one.
+- If you use the same processor instance to start more than one Flow simultaneously, only one Flow will run and the others will receive the **AlreadyRunning** status and be ended.
+- For the detail of the features you could ref to the unit test
+
+### Attention 
   - there should be **only one** init task node as the root node of the dependence tree
   - you must pass the **root node** to initlaze the **TaskProcessor**
   - if there is a circular dependency, the **Check** status will pass a **result** value false.
-  - you must call **actionResult** function of the task after your job is done, whatever it is failed or has an exception.
+  - you must call **actionResult** function of the task after your job is done, whatever it is failed or has an exception，or the Flow will not end.
 
   ## Progress example
   
@@ -143,4 +148,4 @@ class Failed(val failedTask: Task) : ProgressStatus()
   - If the `Check` status is with a result false, the Processor will also be ended.
   
   ## Release Version
-  The last release version is v1.0.5
+  The last release version please ref to the Release page

@@ -30,7 +30,7 @@ internal lateinit var taskLog: ITaskLog
 
 internal class TaskLog(iTaskLog: ITaskLog) : ITaskLog by iTaskLog
 
-internal object DefaultTaskLog : ITaskLog {
+object DefaultTaskLog : ITaskLog {
     override fun e(msg: String) {
         println("error : $msg --> ${Thread.currentThread()}")
     }

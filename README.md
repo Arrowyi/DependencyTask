@@ -1,7 +1,7 @@
 # DependencyTask
 This lib is the framework for dependency tasks, specially for the asynchronous tasks.
 ## Backgroud
-Image that there is a progress with some steps, and the order of the dependencies for those steps maybe not fixed. Most ofter ,like in the android app, we need to do some initilaize progress, such as require permissions , check the account or do some asynchronous progress before letting the user to use the app, and there may be some dependency between the steps， for some requirements , the order of the dependencies may be changed，
+Image that there is a progress with some steps, and the order of the dependencies for those steps maybe not fixed. Most often ,like in the android app, we need to do the initilaize progress, such as require permissions , check the account or do some asynchronous initialized progress before letting the user use the app, and there may be some dependency between the steps， for some requirements , the order of the dependencies would be changed，
 this lib is just for that scenario.
 
 ## Installation

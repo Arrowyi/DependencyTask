@@ -114,9 +114,6 @@ class TaskProcessor(
 
             if (!isChecked) {
                 isChecked = check()
-                tasks.forEach {
-                    it.check()
-                }
             }
 
             if (!isChecked) {
@@ -169,6 +166,7 @@ class TaskProcessor(
 
             if (!tasks.contains(curNode.task)) {
                 tasks.add(curNode.task)
+                curNode.task.check()
             }
 
             //the leaf node

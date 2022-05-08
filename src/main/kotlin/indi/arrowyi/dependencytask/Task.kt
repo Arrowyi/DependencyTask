@@ -55,7 +55,7 @@ abstract class Task {
 
     abstract suspend fun doAction()
 
-    //synchronize for check() to change the status to checked
+    //synchronize for check(), don't allow to add dependency after check
     @Synchronized
     fun addDependency(task: Task) {
         takeIf { status.ordinal < Status.Checked.ordinal && !dependencies.contains(task) }
@@ -115,7 +115,7 @@ abstract class Task {
         listeners.remove(taskStatusListener)
     }
 
-    //synchronized for addDependency to check the status
+    //synchronized for addDependency, don't allow to add dependency after check
     @Synchronized
     internal fun check() {
         return when (status) {

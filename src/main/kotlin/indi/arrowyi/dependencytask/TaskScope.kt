@@ -24,14 +24,14 @@ package indi.arrowyi.dependencytask
 import kotlinx.coroutines.*
 import java.util.concurrent.CancellationException
 
-internal object TaskScope {
+internal class TaskScope(
+    private val actionDispatcher: CoroutineDispatcher,
+    private val notifyDispatcher: CoroutineDispatcher
+) {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val taskDispatcher by lazy { Dispatchers.Default.limitedParallelism(1) }
     private var taskScope: CoroutineScope? = null
-
-    internal lateinit var actionDispatcher: CoroutineDispatcher
-    internal lateinit var notifyDispatcher: CoroutineDispatcher
 
     fun runOnTaskScope(block: () -> Unit) {
         getScope().launch {
@@ -55,7 +55,7 @@ internal object TaskScope {
     @Synchronized
     fun close(closeBlock: () -> Unit) {
         if (taskScope !== null) {
-            taskScope!!.cancel(CancellationException("Task Scope closed"))
+            taskScope!!.takeIf { it.isActive }?.cancel(CancellationException("Task Scope closed"))
             closeBlock()
         }
         taskScope = null

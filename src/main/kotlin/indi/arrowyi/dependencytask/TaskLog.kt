@@ -26,10 +26,6 @@ interface ITaskLog {
     fun d(msg: String)
 }
 
-internal lateinit var taskLog: ITaskLog
-
-internal class TaskLog(iTaskLog: ITaskLog) : ITaskLog by iTaskLog
-
 object DefaultTaskLog : ITaskLog {
     override fun e(msg: String) {
         println("error : $msg --> ${Thread.currentThread()}")

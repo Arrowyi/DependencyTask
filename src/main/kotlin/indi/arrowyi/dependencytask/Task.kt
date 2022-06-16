@@ -23,7 +23,6 @@
 package indi.arrowyi.dependencytask
 
 import TaskException
-import kotlinx.coroutines.*
 import java.util.concurrent.ConcurrentLinkedDeque
 
 interface TaskStatusListener {
@@ -53,7 +52,15 @@ abstract class Task {
     var isAllSuccessorsDone: Boolean = false
         private set
 
+    private lateinit var taskLog: ITaskLog
+    private lateinit var taskScope: TaskScope
+
     abstract suspend fun doAction()
+
+    internal fun setLogAndScope(log: ITaskLog, scope: TaskScope) {
+        taskLog = log
+        taskScope = scope
+    }
 
     //synchronize for check(), don't allow to add dependency after check
     @Synchronized
@@ -65,7 +72,7 @@ abstract class Task {
             }
     }
 
-    fun actionResult(res: Boolean) = TaskScope.runOnTaskScope {
+    fun actionResult(res: Boolean) = taskScope.runOnTaskScope {
         status = if (res) Status.ActionSuccess else Status.ActionFailed
         notifyStatusChanged { listener, task ->
             listener.onActionDone(task)
@@ -146,7 +153,7 @@ abstract class Task {
             Status.Checked, Status.ActionFailed -> {
                 status = Status.Running
                 try {
-                    TaskScope.launchOnActionDispatcher { doAction() }
+                    taskScope.launchOnActionDispatcher { doAction() }
                 } catch (e: Exception) {
                     taskLog.e("task : ${getDescription()}, ${e.message}")
                     actionResult(false)
@@ -182,7 +189,7 @@ abstract class Task {
     private fun notifyStatusChanged(block: (TaskStatusListener, Task) -> Unit) {
         listeners.forEach {
             taskLog.d("${this@Task.getTaskDescription()} notify status")
-            TaskScope.launchOnNotifyDispatcher { block(it, this@Task) }
+            taskScope.launchOnNotifyDispatcher { block(it, this@Task) }
         }
     }
 

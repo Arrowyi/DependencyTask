@@ -36,7 +36,7 @@ private data class TravelNode(
 )
 
 
-sealed class ProgressStatus()
+sealed class ProgressStatus
 
 //check if there is circular dependency , true is for check ok (no circular dependency), false will end the processor, and the tasks is all
 //the tasks this processor will do.
@@ -56,7 +56,7 @@ class AlreadyRunning() : ProgressStatus()
 
 class TaskProcessor(
     private val firstTask: Task,
-    iTaskLog: ITaskLog = DefaultTaskLog,
+    private val iTaskLog: ITaskLog = DefaultTaskLog,
     actionDispatcher: CoroutineDispatcher = Dispatchers.Default,
     notifyDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) {
@@ -67,11 +67,7 @@ class TaskProcessor(
     @Volatile
     private var isRunning = false
 
-    init {
-        TaskLog(iTaskLog).also { taskLog = it }
-        TaskScope.actionDispatcher = actionDispatcher
-        TaskScope.notifyDispatcher = notifyDispatcher
-    }
+    private val taskScope = TaskScope(actionDispatcher, notifyDispatcher)
 
     fun start(): Flow<ProgressStatus> = callbackFlow {
         val listener = object : TaskStatusListener {
@@ -79,7 +75,7 @@ class TaskProcessor(
                 when (task.status) {
                     Status.ActionSuccess -> trySendBlocking(Progress(task))
                     else -> {
-                        taskLog.d("send failed")
+                        iTaskLog.d("send failed")
                         trySendBlocking(Failed(task))
                         channel.close()
                     }
@@ -87,9 +83,9 @@ class TaskProcessor(
             }
 
             override fun onSuccessorsDone(task: Task) {
-                taskLog.d("onSuccessorsDone : ${task.getDescription()}")
+                iTaskLog.d("onSuccessorsDone : ${task.getDescription()}")
                 if (task === firstTask) {
-                    taskLog.d("send complete")
+                    iTaskLog.d("send complete")
                     trySendBlocking(Complete())
                     channel.close()
                 }
@@ -98,8 +94,8 @@ class TaskProcessor(
 
         var duplication = false
 
-        TaskScope.runOnTaskScope {
-            taskLog.d(
+        taskScope.runOnTaskScope {
+            iTaskLog.d(
                 "processor begin with running status " +
                         "is $isRunning with ${this@TaskProcessor} \n and producer scope is $this"
             )
@@ -117,14 +113,14 @@ class TaskProcessor(
             }
 
             if (!isChecked) {
-                taskLog.d("send check failed")
+                iTaskLog.d("send check failed")
                 trySendBlocking(Check(false, null))
                 channel.close()
                 return@runOnTaskScope
             }
 
             registerStatusListenerForTasks(listener)
-
+            setLogAndScopeForTasks()
             trySendBlocking(Check(true, tasks.toList()))
 
             firstTask.start()
@@ -132,8 +128,8 @@ class TaskProcessor(
 
         awaitClose {
             takeUnless { duplication }?.run {
-                TaskScope.close {
-                    taskLog.d("call close with ${this@TaskProcessor} \n and producer scope is $this")
+                taskScope.close {
+                    iTaskLog.d("call close with ${this@TaskProcessor} \n and producer scope is $this")
                     unregisterStatusListenerForTasks(listener)
                     isRunning = false
                 }
@@ -149,6 +145,10 @@ class TaskProcessor(
         tasks.forEach { it.removeResultListener(taskStatusListener) }
     }
 
+    private fun setLogAndScopeForTasks() {
+        tasks.forEach { it.setLogAndScope(iTaskLog, taskScope) }
+    }
+
     //check if there is a cycle dependency
     internal fun check(): Boolean {
         val stack = mutableListOf<TravelNode>()
@@ -160,7 +160,7 @@ class TaskProcessor(
 
         while (true) {
             if (visitedTasks.contains(curNode.task)) {
-                taskLog.e("${curNode.task.getDescription()} has already been visited, maybe there is the circular dependency")
+                iTaskLog.e("${curNode.task.getDescription()} has already been visited, maybe there is the circular dependency")
                 return false
             }
 
